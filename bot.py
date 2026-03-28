@@ -23,8 +23,13 @@ RSS_URLS = [
 
 TG_CHANNELS = [
     "armenpress",
+    "newsarmenia",
     "infocomm",
-    "newsarmenia"
+    "civilnet_am",
+    "azatutyun",
+    "bagramyan26",
+    "armmilitaryportal",
+    "armyanin"   # †Армянин†
 ]
 
 bot = Bot(token=TOKEN)
