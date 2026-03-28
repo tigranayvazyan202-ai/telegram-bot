@@ -14,8 +14,6 @@ RSS_URLS = [
     "https://mediamax.am/en/index.rss"
 ]
 
-translator = GoogleTranslator(source='auto', target='ru')
-
 # Load sent links
 try:
     with open("sent.json", "r") as f:
@@ -23,7 +21,31 @@ try:
 except:
     sent_links = []
 
-# 🧠 Detect category
+def translate(text, lang):
+    try:
+        return GoogleTranslator(source='auto', target=lang).translate(text)
+    except:
+        return text
+
+# 🧠 Clean summary generator
+def make_summary(text):
+    if not text:
+        return ""
+
+    text = text.replace("<p>", "").replace("</p>", "")
+    text = text.replace("<br>", " ")
+
+    sentences = text.split(".")
+    bullets = []
+
+    for s in sentences[:3]:
+        s = s.strip()
+        if len(s) > 20:
+            bullets.append(f"• {s}")
+
+    return "\n".join(bullets)
+
+# 🏛 Category detection
 def get_category(title):
     t = title.lower()
     if any(x in t for x in ["war", "military", "attack", "army"]):
@@ -37,7 +59,7 @@ def get_category(title):
     else:
         return "📰"
 
-# 🧠 Filter important news
+# 🧠 Filter important
 def is_important(title):
     keywords = [
         "armenia", "azerbaijan", "karabakh",
@@ -45,12 +67,6 @@ def is_important(title):
         "border", "economy", "security"
     ]
     return any(k in title.lower() for k in keywords)
-
-def translate(text, lang):
-    try:
-        return GoogleTranslator(source='auto', target=lang).translate(text)
-    except:
-        return text
 
 async def main():
     bot = Bot(token=TOKEN)
@@ -70,21 +86,26 @@ async def main():
 
             emoji = get_category(title)
 
-            # Translate
+            summary = entry.get("summary", "")
+            summary_clean = make_summary(summary)
+
+            # Translate everything
             title_ru = translate(title, "ru")
             title_am = translate(title, "hy")
 
-            # ✍️ Clean format
+            summary_ru = translate(summary_clean, "ru")
+            summary_am = translate(summary_clean, "hy")
+
             message = f"""{emoji} <b>{title_ru}</b>
 
-• {title_ru}
+{summary_ru}
 🔗 {link}
 
 ——————
 
 {emoji} <b>{title_am}</b>
 
-• {title_am}
+{summary_am}
 🔗 {link}
 """
 
