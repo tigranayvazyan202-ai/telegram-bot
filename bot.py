@@ -7,7 +7,7 @@ from deep_translator import GoogleTranslator
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 
-# 🔑 CONFIG (PASTE YOUR VALUES HERE)
+# 🔑 CONFIG (PASTE YOUR VALUES)
 TOKEN = "8643374685:AAG0fnjpBlnq2YXTZ17G-etF-Mth39Oj6q0"
 CHAT_ID = "@ArmeniaBreakingNews"
 
@@ -37,7 +37,7 @@ TG_CHANNELS = [
 bot = Bot(token=TOKEN)
 tg_client = TelegramClient(StringSession(SESSION), api_id, api_hash)
 
-# Load sent memory
+# Load memory (global duplicates protection)
 try:
     with open("sent_all.json", "r") as f:
         sent_all = set(json.load(f))
@@ -51,7 +51,7 @@ def translate(text, lang):
     except:
         return text
 
-# 🧠 Filter
+# 🧠 Quality filter
 def is_good_text(text):
     if not text or len(text) < 50:
         return False
@@ -59,12 +59,12 @@ def is_good_text(text):
         return False
     return True
 
-# 🧠 Scoring
+# 🧠 Smart scoring
 def score_news(text):
     score = 0
     t = text.lower()
 
-    if any(x in t for x in ["war", "attack", "explosion"]):
+    if any(x in t for x in ["war", "attack", "explosion", "strike"]):
         score += 5
     if any(x in t for x in ["president", "minister", "government"]):
         score += 3
@@ -75,7 +75,7 @@ def score_news(text):
 
     return score
 
-# 🧠 Summary
+# 🧠 Summary builder
 def make_summary(text):
     if not text:
         return ""
@@ -90,7 +90,7 @@ def make_summary(text):
 
     return "\n".join(bullets)
 
-# 🏷 Emoji
+# 🏷 Emoji logic
 def get_emoji(text):
     return "🚨" if score_news(text) >= 5 else "📰"
 
@@ -99,6 +99,9 @@ async def main():
 
     # ===== RSS =====
     for url in RSS_URLS:
+        if posted >= MAX_POSTS:
+            break
+
         feed = feedparser.parse(url)
 
         for entry in feed.entries[:5]:
@@ -116,25 +119,25 @@ async def main():
 
             summary = make_summary(entry.get("summary", ""))
 
-            ru = translate(title, "ru")
-            am = translate(title, "hy")
+            ru_title = translate(title, "ru")
+            am_title = translate(title, "hy")
 
-            ru_sum = translate(summary, "ru")
-            am_sum = translate(summary, "hy")
+            ru_summary = translate(summary, "ru")
+            am_summary = translate(summary, "hy")
 
             emoji = get_emoji(title)
 
-            msg = f"""{emoji} <b>{ru}</b>
+            msg = f"""{emoji} <b>{ru_title}</b>
 
-{ru_sum}
+{ru_summary}
 
 🔗 {link}
 
 ——————
 
-{emoji} <b>{am}</b>
+{emoji} <b>{am_title}</b>
 
-{am_sum}
+{am_summary}
 
 🔗 {link}
 """
@@ -196,7 +199,7 @@ async def main():
     with open("sent_all.json", "w") as f:
         json.dump(list(sent_all), f)
 
-# 🔁 Loop
+# 🔁 Infinite loop
 while True:
     asyncio.run(main())
     time.sleep(600)
