@@ -18,7 +18,7 @@ CHANNELS = [
     "newsarmenia"
 ]
 
-client = TelegramClient("session.txt", api_id, api_hash)
+client = TelegramClient("session", api_id, api_hash)
 bot = Bot(token=BOT_TOKEN)
 
 # Load already sent message IDs
