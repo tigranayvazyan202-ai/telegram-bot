@@ -1,6 +1,8 @@
 from telethon import TelegramClient
+from telethon.sessions import StringSession
 import asyncio
 import json
+import time
 from deep_translator import GoogleTranslator
 from telegram import Bot
 
@@ -11,6 +13,9 @@ api_hash = "fe05ace1afd9eca3c75facf10fb8819a"
 BOT_TOKEN = "8643374685:AAG0fnjpBlnq2YXTZ17G-etF-Mth39Oj6q0"
 CHAT_ID = "@ArmeniaBreakingNews"
 
+# 🔐 SESSION STRING (PASTE YOUR FULL STRING HERE)
+SESSION = "PASTE_YOUR_LONG_STRING_HERE"
+
 # Channels to read
 CHANNELS = [
     "armenpress",
@@ -18,7 +23,7 @@ CHANNELS = [
     "newsarmenia"
 ]
 
-client = TelegramClient("session", api_id, api_hash)
+client = TelegramClient(StringSession(SESSION), api_id, api_hash)
 bot = Bot(token=BOT_TOKEN)
 
 # Load already sent message IDs
@@ -76,4 +81,7 @@ async def main():
     with open("tg_sent.json", "w") as f:
         json.dump(sent_ids, f)
 
-asyncio.run(main())
+# 🔁 Run forever (every 10 minutes)
+while True:
+    asyncio.run(main())
+    time.sleep(600)
