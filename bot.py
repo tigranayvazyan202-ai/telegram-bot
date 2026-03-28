@@ -7,13 +7,15 @@ from deep_translator import GoogleTranslator
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 
-# 🔑 CONFIG (REPLACE THESE)
+# 🔑 CONFIG (PASTE YOUR VALUES HERE)
 TOKEN = "8643374685:AAG0fnjpBlnq2YXTZ17G-etF-Mth39Oj6q0"
 CHAT_ID = "@ArmeniaBreakingNews"
 
 api_id = 30831221
 api_hash = "fe05ace1afd9eca3c75facf10fb8819a"
 SESSION = "1ApWapzMBu5UhmohQM5-aKsIpdcoHwHCIa1-i6k8aUg3r8CA6xWeWbnTZzRklhzKlwjcqNExFThHzUoDT-lMyIBpbMFYx5ajvB3-Tay8ja9VjhI56VYvK2ppzlO7k9ZtOIgeeK7QYnejcpn9tVsX1D8oUO6pEvU3vJIfHc7Np0ov1hwCQOsvyVwSx7MyGi-Vle4blEO2YFtR7D0Wi6t03QWuqDLTxLixxJvb0sqK2Bx4QDqkuhtmsOLBCA9naPPe1k9vhZIkWE8qL8eXxH0maA8rXPZeA-R999ZaBFydRCFKQFtkjSlTwIiEzq2lNPaJNNUj0mwOLTiaGR8jU1XWF30G5-2w034s="
+
+MAX_POSTS = 3
 
 RSS_URLS = [
     "https://www.civilnet.am/feed/",
@@ -29,24 +31,18 @@ TG_CHANNELS = [
     "azatutyun",
     "bagramyan26",
     "armmilitaryportal",
-    "armyanin"   # †Армянин†
+    "armyanin"
 ]
 
 bot = Bot(token=TOKEN)
 tg_client = TelegramClient(StringSession(SESSION), api_id, api_hash)
 
-# Load sent data
+# Load sent memory
 try:
-    with open("sent.json", "r") as f:
-        sent_links = json.load(f)
+    with open("sent_all.json", "r") as f:
+        sent_all = set(json.load(f))
 except:
-    sent_links = []
-
-try:
-    with open("tg_sent.json", "r") as f:
-        tg_sent = json.load(f)
-except:
-    tg_sent = []
+    sent_all = set()
 
 # 🌍 Translation
 def translate(text, lang):
@@ -55,15 +51,34 @@ def translate(text, lang):
     except:
         return text
 
-# 🧠 Clean title
-def clean_title(title):
-    return title.replace(":", " –").strip()
+# 🧠 Filter
+def is_good_text(text):
+    if not text or len(text) < 50:
+        return False
+    if any(x in text.lower() for x in ["subscribe", "реклама"]):
+        return False
+    return True
+
+# 🧠 Scoring
+def score_news(text):
+    score = 0
+    t = text.lower()
+
+    if any(x in t for x in ["war", "attack", "explosion"]):
+        score += 5
+    if any(x in t for x in ["president", "minister", "government"]):
+        score += 3
+    if any(x in t for x in ["russia", "usa", "iran", "turkey"]):
+        score += 2
+    if len(text) > 200:
+        score += 1
+
+    return score
 
 # 🧠 Summary
 def make_summary(text):
     if not text:
         return ""
-
     text = text.replace("<p>", "").replace("</p>", "")
     sentences = text.split(".")
     bullets = []
@@ -75,75 +90,83 @@ def make_summary(text):
 
     return "\n".join(bullets)
 
-# 🏛 Category
-def get_category(title):
-    t = title.lower()
-    if any(x in t for x in ["war", "attack", "army"]):
-        return "🔴"
-    elif any(x in t for x in ["government", "minister", "president"]):
-        return "🏛️"
-    elif any(x in t for x in ["economy", "bank", "business"]):
-        return "💰"
-    else:
-        return "📰"
+# 🏷 Emoji
+def get_emoji(text):
+    return "🚨" if score_news(text) >= 5 else "📰"
 
-# 🚨 Breaking
-def is_breaking(title):
-    return any(x in title.lower() for x in ["war", "attack", "explosion", "urgent"])
+async def main():
+    posted = 0
 
-async def process_rss():
+    # ===== RSS =====
     for url in RSS_URLS:
         feed = feedparser.parse(url)
 
         for entry in feed.entries[:5]:
+            if posted >= MAX_POSTS:
+                break
+
             link = entry.link
             title = entry.title
 
-            if link in sent_links:
+            if link in sent_all:
                 continue
 
-            emoji = get_category(title)
-            if is_breaking(title):
-                emoji = "🚨"
+            if score_news(title) < 2:
+                continue
 
             summary = make_summary(entry.get("summary", ""))
 
-            ru_title = clean_title(translate(title, "ru"))
-            am_title = clean_title(translate(title, "hy"))
+            ru = translate(title, "ru")
+            am = translate(title, "hy")
 
-            ru_summary = translate(summary, "ru")
-            am_summary = translate(summary, "hy")
+            ru_sum = translate(summary, "ru")
+            am_sum = translate(summary, "hy")
 
-            msg = f"""{emoji} <b>{ru_title}</b>
+            emoji = get_emoji(title)
 
-{ru_summary}
+            msg = f"""{emoji} <b>{ru}</b>
 
-📎 Источник: RSS  
+{ru_sum}
+
 🔗 {link}
 
 ——————
 
-{emoji} <b>{am_title}</b>
+{emoji} <b>{am}</b>
 
-{am_summary}
+{am_sum}
 
-📎 Աղբյուր: RSS  
 🔗 {link}
 """
 
             await bot.send_message(CHAT_ID, msg, parse_mode="HTML")
-            sent_links.append(link)
 
-async def process_telegram():
+            sent_all.add(link)
+            posted += 1
+
+    # ===== TELEGRAM =====
     await tg_client.start()
 
     for channel in TG_CHANNELS:
+        if posted >= MAX_POSTS:
+            break
+
         async for message in tg_client.iter_messages(channel, limit=5):
+            if posted >= MAX_POSTS:
+                break
 
             if not message.text:
                 continue
 
-            if message.id in tg_sent:
+            unique_id = f"{channel}_{message.id}"
+
+            if unique_id in sent_all:
+                continue
+
+            if not is_good_text(message.text):
+                continue
+
+            if score_news(message.text) < 2:
                 continue
 
             text = message.text[:400]
@@ -151,35 +174,29 @@ async def process_telegram():
             ru = translate(text, "ru")
             am = translate(text, "hy")
 
-            msg = f"""📰 <b>{ru}</b>
+            emoji = get_emoji(text)
+
+            msg = f"""{emoji} <b>{ru}</b>
 
 • {ru}
 
-📎 Источник: Telegram
-
 ——————
 
-📰 <b>{am}</b>
+{emoji} <b>{am}</b>
 
 • {am}
-
-📎 Աղբյուր: Telegram
 """
 
             await bot.send_message(CHAT_ID, msg, parse_mode="HTML")
-            tg_sent.append(message.id)
 
-async def main():
-    await process_rss()
-    await process_telegram()
+            sent_all.add(unique_id)
+            posted += 1
 
-    with open("sent.json", "w") as f:
-        json.dump(sent_links, f)
+    # Save memory
+    with open("sent_all.json", "w") as f:
+        json.dump(list(sent_all), f)
 
-    with open("tg_sent.json", "w") as f:
-        json.dump(tg_sent, f)
-
-# 🔁 Run forever
+# 🔁 Loop
 while True:
     asyncio.run(main())
     time.sleep(600)
