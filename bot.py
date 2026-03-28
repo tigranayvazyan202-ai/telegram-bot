@@ -3,18 +3,16 @@ import feedparser
 import json
 import time
 from telegram import Bot
-from googletrans import Translator
+from deep_translator import GoogleTranslator
 
-TOKEN = "YOUR_TOKEN_HERE"
-CHAT_ID = "@your_channel_username"
+TOKEN = "8643374685:AAG0fnjpBlnq2YXTZ17G-etF-Mth39Oj6q0"
+CHAT_ID = "@ArmeniaBreakingNews"
 
 RSS_URLS = [
     "https://www.civilnet.am/feed/",
     "https://hetq.am/en/rss",
     "https://mediamax.am/en/index.rss"
 ]
-
-translator = Translator()
 
 # Load sent links
 try:
@@ -25,13 +23,13 @@ except:
 
 def translate_to_ru(text):
     try:
-        return translator.translate(text, dest='ru').text
+        return GoogleTranslator(source='auto', target='ru').translate(text)
     except:
         return text
 
 def translate_to_am(text):
     try:
-        return translator.translate(text, dest='hy').text
+        return GoogleTranslator(source='auto', target='hy').translate(text)
     except:
         return text
 
@@ -49,7 +47,6 @@ async def main():
 
             title = entry.title
 
-            # Translate
             title_ru = translate_to_ru(title)
             title_am = translate_to_am(title)
 
