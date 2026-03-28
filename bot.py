@@ -5,8 +5,8 @@ import time
 from telegram import Bot
 from deep_translator import GoogleTranslator
 
-TOKEN = "YOUR_TOKEN_HERE"
-CHAT_ID = "@your_channel_username"
+TOKEN = "8643374685:AAG0fnjpBlnq2YXTZ17G-etF-Mth39Oj6q0"
+CHAT_ID = "@ArmeniaBreakingNews"
 
 RSS_URLS = [
     "https://www.civilnet.am/feed/",
