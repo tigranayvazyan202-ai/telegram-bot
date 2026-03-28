@@ -21,13 +21,14 @@ try:
 except:
     sent_links = []
 
+# 🌍 Translation
 def translate(text, lang):
     try:
         return GoogleTranslator(source='auto', target=lang).translate(text)
     except:
         return text
 
-# 🧠 Clean summary generator
+# 🧠 Smart summary
 def make_summary(text):
     if not text:
         return ""
@@ -38,10 +39,10 @@ def make_summary(text):
     sentences = text.split(".")
     bullets = []
 
-    for s in sentences[:3]:
+    for s in sentences[:4]:
         s = s.strip()
-        if len(s) > 20:
-            bullets.append(f"• {s}")
+        if len(s) > 25:
+            bullets.append(f"• {s.capitalize()}")
 
     return "\n".join(bullets)
 
@@ -58,6 +59,11 @@ def get_category(title):
         return "🌍"
     else:
         return "📰"
+
+# 🚨 Breaking detection
+def is_breaking(title):
+    keywords = ["war", "attack", "explosion", "urgent", "killed", "strike"]
+    return any(k in title.lower() for k in keywords)
 
 # 🧠 Filter important
 def is_important(title):
@@ -86,10 +92,13 @@ async def main():
 
             emoji = get_category(title)
 
+            if is_breaking(title):
+                emoji = "🚨"
+
             summary = entry.get("summary", "")
             summary_clean = make_summary(summary)
 
-            # Translate everything
+            # Translate
             title_ru = translate(title, "ru")
             title_am = translate(title, "hy")
 
@@ -109,11 +118,29 @@ async def main():
 🔗 {link}
 """
 
-            await bot.send_message(
-                chat_id=CHAT_ID,
-                text=message,
-                parse_mode="HTML"
-            )
+            # 🖼 Try to get image
+            image = None
+
+            if "media_content" in entry:
+                image = entry.media_content[0]["url"]
+            elif "links" in entry:
+                for link_obj in entry.links:
+                    if "image" in link_obj.type:
+                        image = link_obj.href
+
+            if image:
+                await bot.send_photo(
+                    chat_id=CHAT_ID,
+                    photo=image,
+                    caption=message,
+                    parse_mode="HTML"
+                )
+            else:
+                await bot.send_message(
+                    chat_id=CHAT_ID,
+                    text=message,
+                    parse_mode="HTML"
+                )
 
             sent_links.append(link)
 
