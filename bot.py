@@ -5,14 +5,16 @@ import time
 from telegram import Bot
 from deep_translator import GoogleTranslator
 
-TOKEN = "8643374685:AAG0fnjpBlnq2YXTZ17G-etF-Mth39Oj6q0"
-CHAT_ID = "@ArmeniaBreakingNews"
+TOKEN = "YOUR_TOKEN_HERE"
+CHAT_ID = "@your_channel_username"
 
 RSS_URLS = [
     "https://www.civilnet.am/feed/",
     "https://hetq.am/en/rss",
     "https://mediamax.am/en/index.rss"
 ]
+
+translator = GoogleTranslator(source='auto', target='ru')
 
 # Load sent links
 try:
@@ -21,15 +23,32 @@ try:
 except:
     sent_links = []
 
-def translate_to_ru(text):
-    try:
-        return GoogleTranslator(source='auto', target='ru').translate(text)
-    except:
-        return text
+# 🧠 Detect category
+def get_category(title):
+    t = title.lower()
+    if any(x in t for x in ["war", "military", "attack", "army"]):
+        return "🔴"
+    elif any(x in t for x in ["government", "minister", "president", "parliament"]):
+        return "🏛️"
+    elif any(x in t for x in ["economy", "bank", "business", "market"]):
+        return "💰"
+    elif any(x in t for x in ["russia", "usa", "iran", "turkey", "eu"]):
+        return "🌍"
+    else:
+        return "📰"
 
-def translate_to_am(text):
+# 🧠 Filter important news
+def is_important(title):
+    keywords = [
+        "armenia", "azerbaijan", "karabakh",
+        "government", "minister", "military",
+        "border", "economy", "security"
+    ]
+    return any(k in title.lower() for k in keywords)
+
+def translate(text, lang):
     try:
-        return GoogleTranslator(source='auto', target='hy').translate(text)
+        return GoogleTranslator(source='auto', target=lang).translate(text)
     except:
         return text
 
@@ -39,25 +58,31 @@ async def main():
     for url in RSS_URLS:
         feed = feedparser.parse(url)
 
-        for entry in feed.entries[:5]:
+        for entry in feed.entries[:7]:
             link = entry.link
+            title = entry.title
 
             if link in sent_links:
                 continue
 
-            title = entry.title
+            if not is_important(title):
+                continue
 
-            title_ru = translate_to_ru(title)
-            title_am = translate_to_am(title)
+            emoji = get_category(title)
 
-            message = f"""📰 <b>{title_ru}</b>
+            # Translate
+            title_ru = translate(title, "ru")
+            title_am = translate(title, "hy")
+
+            # ✍️ Clean format
+            message = f"""{emoji} <b>{title_ru}</b>
 
 • {title_ru}
 🔗 {link}
 
 ——————
 
-📰 <b>{title_am}</b>
+{emoji} <b>{title_am}</b>
 
 • {title_am}
 🔗 {link}
@@ -66,8 +91,7 @@ async def main():
             await bot.send_message(
                 chat_id=CHAT_ID,
                 text=message,
-                parse_mode="HTML",
-                disable_web_page_preview=False
+                parse_mode="HTML"
             )
 
             sent_links.append(link)
