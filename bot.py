@@ -7,7 +7,7 @@ from deep_translator import GoogleTranslator
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 
-# 🔑 CONFIG
+# 🔑 CONFIG (REPLACE THESE)
 TOKEN = "8643374685:AAG0fnjpBlnq2YXTZ17G-etF-Mth39Oj6q0"
 CHAT_ID = "@ArmeniaBreakingNews"
 
@@ -30,7 +30,7 @@ TG_CHANNELS = [
 bot = Bot(token=TOKEN)
 tg_client = TelegramClient(StringSession(SESSION), api_id, api_hash)
 
-# Load sent links
+# Load sent data
 try:
     with open("sent.json", "r") as f:
         sent_links = json.load(f)
@@ -49,6 +49,10 @@ def translate(text, lang):
         return GoogleTranslator(source='auto', target=lang).translate(text)
     except:
         return text
+
+# 🧠 Clean title
+def clean_title(title):
+    return title.replace(":", " –").strip()
 
 # 🧠 Summary
 def make_summary(text):
@@ -99,8 +103,8 @@ async def process_rss():
 
             summary = make_summary(entry.get("summary", ""))
 
-            ru_title = translate(title, "ru")
-            am_title = translate(title, "hy")
+            ru_title = clean_title(translate(title, "ru"))
+            am_title = clean_title(translate(title, "hy"))
 
             ru_summary = translate(summary, "ru")
             am_summary = translate(summary, "hy")
@@ -108,6 +112,8 @@ async def process_rss():
             msg = f"""{emoji} <b>{ru_title}</b>
 
 {ru_summary}
+
+📎 Источник: RSS  
 🔗 {link}
 
 ——————
@@ -115,6 +121,8 @@ async def process_rss():
 {emoji} <b>{am_title}</b>
 
 {am_summary}
+
+📎 Աղբյուր: RSS  
 🔗 {link}
 """
 
@@ -140,13 +148,17 @@ async def process_telegram():
 
             msg = f"""📰 <b>{ru}</b>
 
-{ru}
+• {ru}
+
+📎 Источник: Telegram
 
 ——————
 
 📰 <b>{am}</b>
 
-{am}
+• {am}
+
+📎 Աղբյուր: Telegram
 """
 
             await bot.send_message(CHAT_ID, msg, parse_mode="HTML")
@@ -162,6 +174,7 @@ async def main():
     with open("tg_sent.json", "w") as f:
         json.dump(tg_sent, f)
 
+# 🔁 Run forever
 while True:
     asyncio.run(main())
     time.sleep(600)
