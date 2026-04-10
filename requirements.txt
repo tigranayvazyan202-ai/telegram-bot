@@ -2,3 +2,4 @@ telethon
 feedparser
 deep-translator
 scikit-learn
+python-telegram-bot
