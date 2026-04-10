@@ -2,12 +2,18 @@ import asyncio
 import feedparser
 import json
 import time
+import hashlib
+import re
+
 from telegram import Bot
 from deep_translator import GoogleTranslator
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 
-# 🔑 CONFIG (PASTE YOUR VALUES)
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+# ================= CONFIG =================
 TOKEN = "8643374685:AAG0fnjpBlnq2YXTZ17G-etF-Mth39Oj6q0"
 CHAT_ID = "@ArmeniaBreakingNews"
 
@@ -15,7 +21,7 @@ api_id = 30831221
 api_hash = "fe05ace1afd9eca3c75facf10fb8819a"
 SESSION = "1ApWapzMBu5UhmohQM5-aKsIpdcoHwHCIa1-i6k8aUg3r8CA6xWeWbnTZzRklhzKlwjcqNExFThHzUoDT-lMyIBpbMFYx5ajvB3-Tay8ja9VjhI56VYvK2ppzlO7k9ZtOIgeeK7QYnejcpn9tVsX1D8oUO6pEvU3vJIfHc7Np0ov1hwCQOsvyVwSx7MyGi-Vle4blEO2YFtR7D0Wi6t03QWuqDLTxLixxJvb0sqK2Bx4QDqkuhtmsOLBCA9naPPe1k9vhZIkWE8qL8eXxH0maA8rXPZeA-R999ZaBFydRCFKQFtkjSlTwIiEzq2lNPaJNNUj0mwOLTiaGR8jU1XWF30G5-2w034s="
 
-MAX_POSTS = 3
+MAX_POSTS = 5
 
 RSS_URLS = [
     "https://www.civilnet.am/feed/",
@@ -27,125 +33,136 @@ TG_CHANNELS = [
     "armenpress",
     "newsarmenia",
     "infocomm",
-    "civilnet_am",
-    "azatutyun",
-    "bagramyan26",
-    "armmilitaryportal",
-    "armyanin"
+    "civilnet_am"
 ]
 
 bot = Bot(token=TOKEN)
 tg_client = TelegramClient(StringSession(SESSION), api_id, api_hash)
 
-# Load memory (global duplicates protection)
-try:
-    with open("sent_all.json", "r") as f:
-        sent_all = set(json.load(f))
-except:
-    sent_all = set()
+# ================= LOAD MEMORY =================
+def load_data():
+    try:
+        with open("sent.json", "r") as f:
+            return json.load(f)
+    except:
+        return {"hashes": [], "titles": []}
 
-# 🌍 Translation
-def translate(text, lang):
+def save_data(data):
+    with open("sent.json", "w") as f:
+        json.dump(data, f)
+
+# ================= DEDUP =================
+def normalize(text):
+    text = text.lower()
+    text = re.sub(r"[^\w\s]", "", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+def get_hash(text):
+    return hashlib.md5(normalize(text).encode()).hexdigest()
+
+def is_similar(new_title, old_titles, threshold=0.85):
+    if not old_titles:
+        return False
+
+    vect = TfidfVectorizer().fit(old_titles + [new_title])
+    tfidf = vect.transform(old_titles + [new_title])
+    scores = cosine_similarity(tfidf[-1], tfidf[:-1])[0]
+
+    return any(score > threshold for score in scores)
+
+# ================= TRANSLATION =================
+def tr(text, lang):
     try:
         return GoogleTranslator(source='auto', target=lang).translate(text)
     except:
         return text
 
-# 🧠 Quality filter
-def is_good_text(text):
-    if not text or len(text) < 50:
-        return False
-    if any(x in text.lower() for x in ["subscribe", "реклама"]):
-        return False
-    return True
-
-# 🧠 Smart scoring
-def score_news(text):
-    score = 0
+# ================= CATEGORY =================
+def categorize(text):
     t = text.lower()
 
-    if any(x in t for x in ["war", "attack", "explosion", "strike"]):
-        score += 5
-    if any(x in t for x in ["president", "minister", "government"]):
-        score += 3
-    if any(x in t for x in ["russia", "usa", "iran", "turkey"]):
-        score += 2
-    if len(text) > 200:
-        score += 1
+    if any(k in t for k in ["government","minister","parliament","իշխան"]):
+        return "🏛"
+    if any(k in t for k in ["military","defense","border","army","բանակ"]):
+        return "⚔️"
+    if any(k in t for k in ["economy","business","market","տնտես"]):
+        return "💰"
+    if any(k in t for k in ["education","health","society","հասարակ"]):
+        return "👥"
+    if any(k in t for k in ["diplomacy","embassy","eu","russia"]):
+        return "🌍"
+    if any(k in t for k in ["culture","art","museum","film"]):
+        return "🎭"
 
-    return score
+    return "📰"
 
-# 🧠 Summary builder
-def make_summary(text):
-    if not text:
-        return ""
-    text = text.replace("<p>", "").replace("</p>", "")
-    sentences = text.split(".")
-    bullets = []
+# ================= FORMAT =================
+def build_post(title, text, link=""):
+    emoji = categorize(title + " " + text)
 
-    for s in sentences[:3]:
-        s = s.strip()
-        if len(s) > 25:
-            bullets.append(f"• {s.capitalize()}")
+    ru_title = tr(title, "ru")
+    ru_text = tr(text, "ru")
 
-    return "\n".join(bullets)
+    am_title = tr(title, "hy")
+    am_text = tr(text, "hy")
 
-# 🏷 Emoji logic
-def get_emoji(text):
-    return "🚨" if score_news(text) >= 5 else "📰"
+    return f"""{emoji} <b>{ru_title}</b>
+{ru_text}
 
-async def main():
-    posted = 0
+{emoji} <b>{am_title}</b>
+{am_text}
 
-    # ===== RSS =====
+<a href="{link}">Источник</a>
+"""
+
+# ================= RSS =================
+def fetch_rss():
+    articles = []
+
     for url in RSS_URLS:
-        if posted >= MAX_POSTS:
-            break
-
         feed = feedparser.parse(url)
 
         for entry in feed.entries[:5]:
-            if posted >= MAX_POSTS:
-                break
+            articles.append({
+                "title": entry.title,
+                "text": entry.get("summary", ""),
+                "link": entry.link
+            })
 
-            link = entry.link
-            title = entry.title
+    return articles
 
-            if link in sent_all:
-                continue
+# ================= MAIN =================
+async def main():
+    data = load_data()
+    posted = 0
 
-            if score_news(title) < 2:
-                continue
+    # ===== RSS =====
+    for article in fetch_rss():
+        if posted >= MAX_POSTS:
+            break
 
-            summary = make_summary(entry.get("summary", ""))
+        title = article["title"]
+        text = article["text"]
 
-            ru_title = translate(title, "ru")
-            am_title = translate(title, "hy")
+        h = get_hash(title)
 
-            ru_summary = translate(summary, "ru")
-            am_summary = translate(summary, "hy")
+        if h in data["hashes"]:
+            continue
 
-            emoji = get_emoji(title)
+        if is_similar(title, data["titles"]):
+            continue
 
-            msg = f"""{emoji} <b>{ru_title}</b>
+        post = build_post(title, text, article["link"])
 
-{ru_summary}
+        await bot.send_message(CHAT_ID, post, parse_mode="HTML")
 
-🔗 {link}
+        data["hashes"].append(h)
+        data["titles"].append(title)
+        save_data(data)
 
-——————
-
-{emoji} <b>{am_title}</b>
-
-{am_summary}
-
-🔗 {link}
-"""
-
-            await bot.send_message(CHAT_ID, msg, parse_mode="HTML")
-
-            sent_all.add(link)
-            posted += 1
+        posted += 1
+        await asyncio.sleep(10)
 
     # ===== TELEGRAM =====
     await tg_client.start()
@@ -161,45 +178,29 @@ async def main():
             if not message.text:
                 continue
 
-            unique_id = f"{channel}_{message.id}"
-
-            if unique_id in sent_all:
-                continue
-
-            if not is_good_text(message.text):
-                continue
-
-            if score_news(message.text) < 2:
-                continue
-
+            title = message.text[:100]
             text = message.text[:400]
 
-            ru = translate(text, "ru")
-            am = translate(text, "hy")
+            h = get_hash(title)
 
-            emoji = get_emoji(text)
+            if h in data["hashes"]:
+                continue
 
-            msg = f"""{emoji} <b>{ru}</b>
+            if is_similar(title, data["titles"]):
+                continue
 
-• {ru}
+            post = build_post(title, text)
 
-——————
+            await bot.send_message(CHAT_ID, post, parse_mode="HTML")
 
-{emoji} <b>{am}</b>
+            data["hashes"].append(h)
+            data["titles"].append(title)
+            save_data(data)
 
-• {am}
-"""
-
-            await bot.send_message(CHAT_ID, msg, parse_mode="HTML")
-
-            sent_all.add(unique_id)
             posted += 1
+            await asyncio.sleep(10)
 
-    # Save memory
-    with open("sent_all.json", "w") as f:
-        json.dump(list(sent_all), f)
-
-# 🔁 Infinite loop
+# 🔁 LOOP
 while True:
     asyncio.run(main())
     time.sleep(600)
