@@ -1,4 +1,4 @@
-python-telegram-bot
+telethon
 feedparser
 deep-translator
-telethon
+scikit-learn
